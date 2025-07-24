@@ -350,3 +350,81 @@ class Testing_Task_Walker_Nav_Menu extends Walker_Nav_Menu {
     $output .= "</li>\n";
   }
 }
+
+add_action('rest_api_init', function () {
+    register_rest_route('testing-task/v1', '/cars', [
+        'methods'  => 'GET',
+        'callback' => 'testing_task_get_cars',
+        'permission_callback' => 'testing_task_check_token'
+    ]);
+});
+
+function testing_task_check_token(WP_REST_Request $request) {
+    $headers = $request->get_headers();
+
+    if (empty($headers['authorization'])) {
+        return new WP_Error('rest_forbidden', 'Authorization header missing', ['status' => 403]);
+    }
+
+    $auth = $headers['authorization'][0];
+
+    if (stripos($auth, 'Bearer ') !== 0) {
+        return new WP_Error('rest_forbidden', 'Invalid authorization header', ['status' => 403]);
+    }
+
+    $token = trim(str_ireplace('Bearer', '', $auth));
+
+    if ($token !== API_TOKEN) {
+        return new WP_Error('rest_forbidden', 'Invalid token', ['status' => 403]);
+    }
+
+    return true;
+}
+
+function testing_task_get_cars(WP_REST_Request $request) {
+    $cached = get_transient('testing_task_cars_data');
+    if ($cached !== false) {
+        return rest_ensure_response($cached);
+    }
+
+    $args = [
+        'post_type'      => 'car',
+        'posts_per_page' => -1,
+        'post_status'    => 'publish',
+    ];
+
+    $query = new WP_Query($args);
+    $cars = [];
+
+    if ($query->have_posts()) {
+        while ($query->have_posts()) {
+            $query->the_post();
+
+            $post_id = get_the_ID();
+
+            $cars[] = [
+                'id'          => $post_id,
+                'title'       => get_the_title($post_id),
+                'description' => get_field('description', $post_id),
+                'price'       => get_field('price', $post_id),
+                'image'       => get_field('image', $post_id) ? wp_get_attachment_url(get_field('image', $post_id)) : '',
+                'brand'       => get_the_terms($post_id, 'car-brand') ? wp_list_pluck(get_the_terms($post_id, 'car-brand'), 'name') : [],
+                'category'    => get_the_terms($post_id, 'car-category') ? wp_list_pluck(get_the_terms($post_id, 'car-category'), 'name') : [],
+            ];
+        }
+        wp_reset_postdata();
+    }
+
+    set_transient('testing_task_cars_data', $cars, 12 * 3600);
+
+    return rest_ensure_response($cars);
+}
+
+function testing_task_clear_cars_cache($post_id) {
+    if (get_post_type($post_id) === 'car') {
+        delete_transient('testing_task_cars_data');
+    }
+}
+add_action('save_post', 'testing_task_clear_cars_cache');
+add_action('deleted_post', 'testing_task_clear_cars_cache');
+add_action('trashed_post', 'testing_task_clear_cars_cache');
