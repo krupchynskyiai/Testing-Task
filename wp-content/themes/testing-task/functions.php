@@ -143,6 +143,8 @@ function testing_task_scripts() {
 
 	wp_enqueue_script( 'testing-task-navigation', get_template_directory_uri() . '/js/navigation.js', array(), _S_VERSION, true );
 
+	wp_enqueue_script( 'testing-task-main', get_template_directory_uri() . '/js/main.js', array(), _S_VERSION, true );
+
 	if ( is_singular() && comments_open() && get_option( 'thread_comments' ) ) {
 		wp_enqueue_script( 'comment-reply' );
 	}
@@ -177,7 +179,6 @@ if ( defined( 'JETPACK__VERSION' ) ) {
 }
 
 function theme_register_car_catalog_block() {
-    // Реєстрація блока
     register_block_type( get_template_directory() . '/blocks/car-catalog', [
         'render_callback' => 'render_car_catalog_callback',
     ]);
@@ -202,3 +203,150 @@ function register_my_menus() {
 }
 
 add_action( 'init', 'register_my_menus' ); 
+
+function testing_task_enqueue_admin_scripts($hook) {
+    if ($hook !== 'settings_page_testing-task-general-settings') {
+        return;
+    }
+
+    wp_enqueue_media();
+
+    wp_enqueue_script(
+        'testing-task-admin-media',
+        get_template_directory_uri() . '/assets/js/admin-media.js',
+        ['jquery'],
+        null,
+        true
+    );
+}
+add_action('admin_enqueue_scripts', 'testing_task_enqueue_admin_scripts');
+
+function testing_task_register_general_settings_page() {
+    add_options_page(
+        'General Settings',
+        'General Settings',
+        'manage_options',
+        'testing-task-general-settings',
+        'testing_task_general_settings_callback'
+    );
+}
+add_action('admin_menu', 'testing_task_register_general_settings_page');
+
+function testing_task_general_settings_callback() {
+    ?>
+    <div class="wrap">
+        <h1>General Settings</h1>
+        <form method="post" action="options.php">
+            <?php
+            settings_fields('testing_task_general_settings_group');
+            do_settings_sections('testing-task-general-settings');
+            submit_button();
+            ?>
+        </form>
+    </div>
+    <?php
+}
+
+function testing_task_register_general_settings() {
+    register_setting('testing_task_general_settings_group', 'testing_task_site_logo');
+    
+    register_setting('testing_task_general_settings_group', 'testing_task_site_phone', [
+        'type' => 'string',
+        'sanitize_callback' => 'sanitize_text_field',
+        'default' => '',
+    ]);
+
+    add_settings_section(
+        'testing_task_general_section',
+        'Основні налаштування',
+        null,
+        'testing-task-general-settings'
+    );
+
+    add_settings_field(
+        'testing_task_site_logo',
+        'Логотип сайту',
+        'testing_task_site_logo_render',
+        'testing-task-general-settings',
+        'testing_task_general_section'
+    );
+
+    add_settings_field(
+        'testing_task_site_phone',
+        'Номер телефону',
+        'testing_task_site_phone_render',
+        'testing-task-general-settings',
+        'testing_task_general_section'
+    );
+}
+add_action('admin_init', 'testing_task_register_general_settings');
+
+function testing_task_site_phone_render() {
+    $value = get_option('testing_task_site_phone', '');
+    echo '<input type="text" name="testing_task_site_phone" value="' . esc_attr($value) . '" class="regular-text" />';
+}
+
+function testing_task_site_logo_render() {
+    $logo_id = get_option('testing_task_site_logo');
+    $logo_url = $logo_id ? wp_get_attachment_url($logo_id) : ''; ?>
+    <?php print_r($logo_url);?>
+		<div style="mb-4">
+    	<img id="logo-preview" src="<?php esc_url($logo_url) ?>" />
+    </div>
+
+    <input type="hidden" id="testing_task_site_logo" name="testing_task_site_logo" value="<?php esc_attr($logo_id) ?>" />
+    <button type="button" class="button" id="upload_logo_button">Upload Logo</button>
+    <button type="button" class="button" id="remove_logo_button">Remove</button>
+		
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const uploadBtn = document.getElementById("upload_logo_button");
+            const removeBtn = document.getElementById("remove_logo_button");
+            const preview = document.getElementById("logo-preview");
+            const hiddenInput = document.getElementById("testing_task_site_logo");
+
+            uploadBtn.addEventListener("click", function (e) {
+                e.preventDefault();
+                const frame = wp.media({
+                    title: "Select logo",
+                    button: { text: "Select" },
+                    multiple: false
+                });
+                frame.on("select", function () {
+                    const attachment = frame.state().get("selection").first().toJSON();
+                    hiddenInput.value = attachment.id;
+                    preview.src = attachment.url;
+                    preview.style.display = "block";
+                });
+                frame.open();
+            });
+
+            removeBtn.addEventListener("click", function () {
+                hiddenInput.value = "";
+                preview.src = "";
+                preview.style.display = "none";
+            });
+        });
+    </script>
+    <?php
+}
+
+function testing_task_allow_svg_uploads($mimes) {
+    if (current_user_can('administrator')) {
+        $mimes['svg'] = 'image/svg+xml';
+    }
+    return $mimes;
+}
+add_filter('upload_mimes', 'testing_task_allow_svg_uploads');
+
+class Testing_Task_Walker_Nav_Menu extends Walker_Nav_Menu {
+  function start_el( &$output, $item, $depth = 0, $args = array(), $id = 0 ) {
+    $classes = 'list-none h-fit';
+    $output .= '<li class="' . $classes . '">';
+    $output .= '<a href="' . esc_attr( $item->url ) . '">' . $item->title . '</a>';
+  }
+
+  function end_el( &$output, $item, $depth = 0, $args = array() ) {
+    $output .= "</li>\n";
+  }
+}
