@@ -176,3 +176,29 @@ if ( defined( 'JETPACK__VERSION' ) ) {
 	require get_template_directory() . '/inc/jetpack.php';
 }
 
+function theme_register_car_catalog_block() {
+    // Реєстрація блока
+    register_block_type( get_template_directory() . '/blocks/car-catalog', [
+        'render_callback' => 'render_car_catalog_callback',
+    ]);
+}
+add_action('init', 'theme_register_car_catalog_block');
+
+function render_car_catalog_callback($attributes, $content) {
+    ob_start();
+    ?>
+    <div id="car-catalog-frontend"></div>
+    <?php
+    return ob_get_clean();
+}
+
+function register_my_menus() {
+  register_nav_menus(
+      array(
+          'header-menu' => __( 'Header Menu' ),
+          'footer-menu' => __( 'Footer Menu' )
+      )
+  );
+}
+
+add_action( 'init', 'register_my_menus' ); 

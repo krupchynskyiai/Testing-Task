@@ -1,8 +1,8 @@
 wp-content/themes/*
 wp-content/index.php
-wp-content/themes/testing-task/node_modules/**
 !wp-content/themes/testing-task/
 !wp-content/plugins/
 !wp-content/plugins/**
 !wp-content/themes/testing-task/
 !wp-content/themes/testing-task/**
+wp-content/themes/testing-task/node_modules/

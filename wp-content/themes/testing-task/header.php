@@ -23,37 +23,22 @@
 <body <?php body_class(); ?>>
 <?php wp_body_open(); ?>
 <div id="page" class="site">
-	<a class="skip-link screen-reader-text" href="#primary"><?php esc_html_e( 'Skip to content', 'testing-task' ); ?></a>
-
-	<header id="masthead" class="site-header">
-		<div class="site-branding">
-			<?php
-			the_custom_logo();
-			if ( is_front_page() && is_home() ) :
-				?>
-				<h1 class="site-title"><a href="<?php echo esc_url( home_url( '/' ) ); ?>" rel="home"><?php bloginfo( 'name' ); ?></a></h1>
-				<?php
-			else :
-				?>
-				<p class="site-title"><a href="<?php echo esc_url( home_url( '/' ) ); ?>" rel="home"><?php bloginfo( 'name' ); ?></a></p>
-				<?php
-			endif;
-			$testing_task_description = get_bloginfo( 'description', 'display' );
-			if ( $testing_task_description || is_customize_preview() ) :
-				?>
-				<p class="site-description"><?php echo $testing_task_description; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></p>
-			<?php endif; ?>
-		</div><!-- .site-branding -->
-
-		<nav id="site-navigation" class="main-navigation">
-			<button class="menu-toggle" aria-controls="primary-menu" aria-expanded="false"><?php esc_html_e( 'Primary Menu', 'testing-task' ); ?></button>
-			<?php
-			wp_nav_menu(
-				array(
-					'theme_location' => 'menu-1',
-					'menu_id'        => 'primary-menu',
-				)
-			);
-			?>
-		</nav><!-- #site-navigation -->
-	</header><!-- #masthead -->
+	<header class='header'>
+		<div class='container'>
+			<div class='header__content flex justify-between gap-4'>
+				<img class='' src='' alt='logo'>
+				<div class='header__menu w-3/4'>
+					<?php
+            if ( has_nav_menu( 'header-menu' ) ) {
+              wp_nav_menu( array(
+                'theme_location' => 'heade-menu',
+                'container'      => false,
+                'menu_class'     => 'header__header-menu',
+                'depth'          => 1,
+            	));
+        		}
+        	?>
+				</div>
+			</div>
+		</div>
+	</header>
