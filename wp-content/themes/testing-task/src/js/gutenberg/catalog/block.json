@@ -1,0 +1,13 @@
+{
+  "name": "testing-task/catalog",
+  "title": "Catalog",
+  "category": "widgets",
+  "icon": "car",
+  "description": "Каталог автомобілів з фільтрами",
+  "supports": {
+    "html": false
+  },
+  "attributes": {},
+  "editorScript": "file:./index.js",
+  "script": "file:./frontend.js"
+}

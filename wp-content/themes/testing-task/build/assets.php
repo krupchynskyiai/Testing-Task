@@ -1,0 +1,1 @@
+<?php return array('js/index.js' => array('dependencies' => array('wp-blocks', 'wp-i18n', 'wp-polyfill'), 'version' => '5f063cdee7ea6795a869'), 'js/blocks/catalog/frontend.js' => array('dependencies' => array('wp-polyfill'), 'version' => '9ba6141157f3317d61d2'));

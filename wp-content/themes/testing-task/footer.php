@@ -18,9 +18,9 @@
 
 	<footer class='footer border-t border-white-50 bg-sky-500/50'>
 		<div class='container'>
-			<div class='footer__content flex flex-row-reverse gap-4 pt-8 pb-16 items-center'>
+			<div class='footer__content flex flex-row-reverse justify-between gap-24 md:justify-normal pt-8 pb-16 items-center'>
 				<img src='<?php echo $logo_url ?>' class=' h-16' alt='footer-logo'>
-				<div class='footer__menu w-1/4 flex flex-col gap-4'>
+				<div class='footer__menu w-fit flex flex-col gap-4'>
 					<?php
             if ( has_nav_menu( 'footer-menu' ) ) {
               wp_nav_menu( array(

@@ -144,12 +144,42 @@ function testing_task_scripts() {
 	wp_enqueue_script( 'testing-task-navigation', get_template_directory_uri() . '/js/navigation.js', array(), _S_VERSION, true );
 
 	wp_enqueue_script( 'testing-task-main', get_template_directory_uri() . '/js/main.js', array(), _S_VERSION, true );
+    // wp_enqueue_script( 'testing-task-build-js', get_template_directory_uri() . '/build/js/index.js', array(), _S_VERSION, true );
 
 	if ( is_singular() && comments_open() && get_option( 'thread_comments' ) ) {
 		wp_enqueue_script( 'comment-reply' );
 	}
 }
 add_action( 'wp_enqueue_scripts', 'testing_task_scripts' );
+
+function testing_task_register_blocks() {
+    wp_register_script(
+        'testing-task-catalog-editor',
+        get_template_directory_uri() . '/build/js/index.js',
+        [ 'wp-blocks', 'wp-element', 'wp-i18n', 'wp-editor' ],
+        filemtime( get_template_directory() . '/build/js/index.js' ),
+        true
+    );
+
+    register_block_type( 'testing-task/catalog', [
+        'editor_script' => 'testing-task-catalog-editor',
+    ]);
+}
+add_action( 'init', 'testing_task_register_blocks' );
+
+
+add_action('wp_enqueue_scripts', function () {
+    if (has_block('testing-task/catalog')) {
+        wp_enqueue_script(
+            'testing-task-catalog-frontend',
+            get_template_directory_uri() . '/build/js/blocks/catalog/frontend.js',
+            [ 'wp-element' ],
+            filemtime(get_template_directory() . '/build/js/blocks/catalog/frontend.js'),
+            true
+        );
+    }
+});
+
 
 /**
  * Implement the Custom Header feature.
@@ -178,20 +208,9 @@ if ( defined( 'JETPACK__VERSION' ) ) {
 	require get_template_directory() . '/inc/jetpack.php';
 }
 
-function theme_register_car_catalog_block() {
-    register_block_type( get_template_directory() . '/blocks/car-catalog', [
-        'render_callback' => 'render_car_catalog_callback',
-    ]);
-}
-add_action('init', 'theme_register_car_catalog_block');
+// require_once get_template_directory() . '/template-parts/blocks/blocks.php';
 
-function render_car_catalog_callback($attributes, $content) {
-    ob_start();
-    ?>
-    <div id="car-catalog-frontend"></div>
-    <?php
-    return ob_get_clean();
-}
+// add_action('init', 'testing_task_register_blocks');
 
 function register_my_menus() {
   register_nav_menus(
@@ -351,6 +370,36 @@ class Testing_Task_Walker_Nav_Menu extends Walker_Nav_Menu {
   }
 }
 
+function catalog_rewrite_rules() {
+    add_rewrite_rule(
+        '^catalog/brand/([^/]+)/page/([0-9]+)/?$',
+        'index.php?pagename=catalog&brand=$matches[1]&paged=$matches[2]',
+        'top'
+    );
+
+    add_rewrite_rule(
+        '^catalog/brand/([^/]+)/?$',
+        'index.php?pagename=catalog&brand=$matches[1]',
+        'top'
+    );
+
+    add_rewrite_rule(
+        '^catalog/page/([0-9]+)/?$',
+        'index.php?pagename=catalog&paged=$matches[1]',
+        'top'
+    );
+}
+add_action('init', 'catalog_rewrite_rules');
+
+function catalog_query_vars($vars) {
+    $vars[] = 'brand';
+    $vars[] = 'paged';
+    return $vars;
+}
+add_filter('query_vars', 'catalog_query_vars');
+flush_rewrite_rules();
+
+
 add_action('rest_api_init', function () {
     register_rest_route('testing-task/v1', '/cars', [
         'methods'  => 'GET',
@@ -382,16 +431,183 @@ function testing_task_check_token(WP_REST_Request $request) {
 }
 
 function testing_task_get_cars(WP_REST_Request $request) {
-    $cached = get_transient('testing_task_cars_data');
-    if ($cached !== false) {
-        return rest_ensure_response($cached);
+    $search   = $request->get_param('search');
+    $brand    = $request->get_param('brand');
+    $category = $request->get_param('category');
+    $sort     = $request->get_param('sort');
+    $page     = max(1, (int) $request->get_param('page'));
+    $per_page = max(1, (int) $request->get_param('per_page', 9));
+
+    $tax_query  = [];
+    $post_ids   = [];
+    $search_terms_exist = false;
+
+    if ($brand) {
+        $brand = explode(',', $brand);
+        $tax_query[] = [
+            'taxonomy' => 'car-brand',
+            'field'    => 'slug',
+            'terms'    => $brand,
+        ];
+    }
+
+    if ($category) {
+        $category = explode(',', $category);
+        $tax_query[] = [
+            'taxonomy' => 'car-category',
+            'field'    => 'slug',
+            'terms'    => $category,
+        ];
+    }
+
+    if ($search && !$tax_query) {
+
+        $meta_query = [
+            [
+                'key'     => 'description',
+                'value'   => $search,
+                'compare' => 'LIKE',
+            ],
+        ];
+
+        $meta_query_ids = get_posts([
+            'post_type'      => 'car',
+            'post_status'    => 'publish',
+            'posts_per_page' => -1,
+            'fields'         => 'ids',
+            'meta_query'     => $meta_query,
+        ]);
+
+        $title_ids = get_posts([
+            'post_type'      => 'car',
+            'post_status'    => 'publish',
+            'posts_per_page' => -1,
+            'fields'         => 'ids',
+            's'              => $search,
+        ]);
+
+        $meta_and_title_ids = array_unique(array_merge($meta_query_ids, $title_ids));
+        if (!empty($meta_and_title_ids)) {
+            $search_terms_exist = true;
+        }
+
+        $matching_brands = get_terms([
+            'taxonomy'   => 'car-brand',
+            'hide_empty' => false,
+            'search'     => $search,
+        ]);
+
+        if (!empty($matching_brands) && !is_wp_error($matching_brands)) {
+            $brand_slugs = wp_list_pluck($matching_brands, 'slug');
+            if (!empty($brand_slugs)) {
+                $tax_query[] = [
+                    'taxonomy' => 'car-brand',
+                    'field'    => 'slug',
+                    'terms'    => $brand_slugs,
+                ];
+                $search_terms_exist = true;
+            }
+        }
+
+        $matching_categories = get_terms([
+            'taxonomy'   => 'car-category',
+            'hide_empty' => false,
+            'search'     => $search,
+        ]);
+
+        if (!empty($matching_categories) && !is_wp_error($matching_categories)) {
+            $category_slugs = wp_list_pluck($matching_categories, 'slug');
+            if (!empty($category_slugs)) {
+                $tax_query[] = [
+                    'taxonomy' => 'car-category',
+                    'field'    => 'slug',
+                    'terms'    => $category_slugs,
+                ];
+                $search_terms_exist = true;
+            }
+        }
+
+        $tax_query_ids = [];
+        if (!empty($tax_query)) {
+            $tax_query_ids = get_posts([
+                'post_type'      => 'car',
+                'post_status'    => 'publish',
+                'posts_per_page' => -1,
+                'fields'         => 'ids',
+                'tax_query'      => ['relation' => 'OR'] + $tax_query,
+            ]);
+        }
+
+        $post_ids = array_unique(array_merge($meta_and_title_ids, $tax_query_ids));
+
+        if (!$search_terms_exist) {
+            $post_ids = [0];
+        }
+    } elseif ($search && $tax_query) {
+        $meta_query = [
+            'relation' => 'OR',
+            [
+                'key'     => 'description',
+                'value'   => $search,
+                'compare' => 'LIKE',
+            ],
+            [
+                'key'     => 'title',
+                'value'   => $search,
+                'compare' => 'LIKE',
+            ],
+        ];
     }
 
     $args = [
         'post_type'      => 'car',
-        'posts_per_page' => -1,
+        'posts_per_page' => $per_page,
+        'paged'          => $page,
         'post_status'    => 'publish',
     ];
+
+    if (!empty($meta_query)) {
+    $args['meta_query'] = $meta_query;
+}
+
+    if (!empty($post_ids)) {
+        $args['post__in'] = $post_ids;
+        $args['orderby']  = 'post__in';
+    } elseif (!empty($tax_query)) {
+        $args['tax_query'] = count($tax_query) > 1
+            ? array_merge(['relation' => 'AND'], $tax_query)
+            : $tax_query;
+    }
+
+    switch ($sort) {
+        case 'az':
+            $args['orderby'] = 'title';
+            $args['order']   = 'ASC';
+            break;
+        case 'za':
+            $args['orderby'] = 'title';
+            $args['order']   = 'DESC';
+            break;
+        case 'oldest':
+            $args['orderby'] = 'date';
+            $args['order']   = 'ASC';
+            break;
+        case 'expensive':
+            $args['meta_key'] = 'price';
+            $args['orderby']  = 'meta_value_num';
+            $args['order']   = 'DESC';
+            break;
+        case 'cheap':
+            $args['meta_key'] = 'price';
+            $args['orderby']  = 'meta_value_num';
+            $args['order']   = 'ASC';
+            break;
+        case 'newest':
+        default:
+            $args['orderby'] = 'date';
+            $args['order']   = 'DESC';
+            break;
+    }
 
     $query = new WP_Query($args);
     $cars = [];
@@ -399,26 +615,40 @@ function testing_task_get_cars(WP_REST_Request $request) {
     if ($query->have_posts()) {
         while ($query->have_posts()) {
             $query->the_post();
-
             $post_id = get_the_ID();
+
+            $image = get_field('image', $post_id);
+            $image_url = is_array($image) && isset($image['url']) ? $image['url'] : (is_string($image) ? $image : '');
+
+            $brands     = get_the_terms($post_id, 'car-brand');
+            $categories = get_the_terms($post_id, 'car-category');
 
             $cars[] = [
                 'id'          => $post_id,
                 'title'       => get_the_title($post_id),
                 'description' => get_field('description', $post_id),
                 'price'       => get_field('price', $post_id),
-                'image'       => get_field('image', $post_id) ? wp_get_attachment_url(get_field('image', $post_id)) : '',
-                'brand'       => get_the_terms($post_id, 'car-brand') ? wp_list_pluck(get_the_terms($post_id, 'car-brand'), 'name') : [],
-                'category'    => get_the_terms($post_id, 'car-category') ? wp_list_pluck(get_the_terms($post_id, 'car-category'), 'name') : [],
+                'image'       => $image_url,
+                'brand'       => $brands ? wp_list_pluck($brands, 'name') : [],
+                'category'    => $categories ? wp_list_pluck($categories, 'name') : [],
+                'link'        => get_permalink($post_id),
             ];
         }
         wp_reset_postdata();
     }
 
-    set_transient('testing_task_cars_data', $cars, 12 * 3600);
+    $brands     = get_terms(['taxonomy' => 'car-brand', 'hide_empty' => false]);
+    $categories = get_terms(['taxonomy' => 'car-category', 'hide_empty' => false]);
 
-    return rest_ensure_response($cars);
+    return rest_ensure_response([
+        'cars'         => $cars,
+        'brands'       => wp_list_pluck($brands, 'name', 'slug'),
+        'categories'   => wp_list_pluck($categories, 'name', 'slug'),
+        'total_pages'  => $query->max_num_pages,
+        'current_page' => $page,
+    ]);
 }
+
 
 function testing_task_clear_cars_cache($post_id) {
     if (get_post_type($post_id) === 'car') {

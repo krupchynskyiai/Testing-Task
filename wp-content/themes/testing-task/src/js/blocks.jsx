@@ -1,0 +1,1 @@
+import "./gutenberg/catalog/index.js";
