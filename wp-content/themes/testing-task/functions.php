@@ -141,10 +141,14 @@ function testing_task_scripts() {
 	wp_enqueue_style( 'testing-task-style', get_stylesheet_uri(), array(), _S_VERSION );
 	wp_style_add_data( 'testing-task-style', 'rtl', 'replace' );
 
-	wp_enqueue_script( 'testing-task-navigation', get_template_directory_uri() . '/js/navigation.js', array(), _S_VERSION, true );
+	wp_enqueue_script( 'testing-task-main', get_template_directory_uri() . '/build/js/main.js', array(), _S_VERSION, true );
+    wp_enqueue_script( 'testing-task-build-js', get_template_directory_uri() . '/build/js/slider.js', array(), _S_VERSION, true );
 
-	wp_enqueue_script( 'testing-task-main', get_template_directory_uri() . '/js/main.js', array(), _S_VERSION, true );
-    // wp_enqueue_script( 'testing-task-build-js', get_template_directory_uri() . '/build/js/index.js', array(), _S_VERSION, true );
+    wp_enqueue_script( 'testing-task-all-blocks-js', get_template_directory_uri() . '/build/js/blocks/all-blocks.js', array(), _S_VERSION, true );
+
+    wp_localize_script('testing-task-all-blocks-js', 'secretData', array(
+        'apiToken' => defined('API_TOKEN') ? API_TOKEN : ''
+    ));
 
 	if ( is_singular() && comments_open() && get_option( 'thread_comments' ) ) {
 		wp_enqueue_script( 'comment-reply' );
@@ -177,6 +181,9 @@ add_action('wp_enqueue_scripts', function () {
             filemtime(get_template_directory() . '/build/js/blocks/catalog/frontend.js'),
             true
         );
+        wp_localize_script('testing-task-catalog-frontend', 'secretData', array(
+            'apiToken' => defined('API_TOKEN') ? API_TOKEN : ''
+        ));
     }
 });
 
@@ -208,9 +215,9 @@ if ( defined( 'JETPACK__VERSION' ) ) {
 	require get_template_directory() . '/inc/jetpack.php';
 }
 
-// require_once get_template_directory() . '/template-parts/blocks/blocks.php';
+require_once get_template_directory() . '/template-parts/blocks/blocks.php';
 
-// add_action('init', 'testing_task_register_blocks');
+add_action('init', 'acf_blocks_init');
 
 function register_my_menus() {
   register_nav_menus(
@@ -275,6 +282,12 @@ function testing_task_register_general_settings() {
         'default' => '',
     ]);
 
+    register_setting('testing_task_general_settings_group', 'testing_task_copyright', [
+        'type' => 'string',
+        'sanitize_callback' => 'sanitize_text_field',
+        'default' => '',
+    ]);
+
     add_settings_section(
         'testing_task_general_section',
         'Основні налаштування',
@@ -297,6 +310,14 @@ function testing_task_register_general_settings() {
         'testing-task-general-settings',
         'testing_task_general_section'
     );
+
+    add_settings_field(
+        'testing_task_copyright',
+        'Копірайт',
+        'testing_task_site_copyright_render',
+        'testing-task-general-settings',
+        'testing_task_general_section'
+    );
 }
 add_action('admin_init', 'testing_task_register_general_settings');
 
@@ -305,18 +326,23 @@ function testing_task_site_phone_render() {
     echo '<input type="text" name="testing_task_site_phone" value="' . esc_attr($value) . '" class="regular-text" />';
 }
 
+function testing_task_site_copyright_render() {
+    $value = get_option('testing_task_copyright', '');
+    echo '<input type="text" name="testing_task_copyright" value="' . esc_attr($value) . '" class="regular-text" />';
+}
+
 function testing_task_site_logo_render() {
     $logo_id = get_option('testing_task_site_logo');
-    $logo_url = $logo_id ? wp_get_attachment_url($logo_id) : ''; ?>
-    <?php print_r($logo_url);?>
-		<div style="mb-4">
-    	<img id="logo-preview" src="<?php esc_url($logo_url) ?>" />
+    $logo_url = $logo_id ? wp_get_attachment_url($logo_id) : '';
+    ?>
+    <div class="mb-4">
+      <img id="logo-preview" src="<?php echo esc_url($logo_url); ?>" style="<?php echo $logo_url ? 'display:block;' : 'display:none;'; ?>" />
     </div>
 
-    <input type="hidden" id="testing_task_site_logo" name="testing_task_site_logo" value="<?php esc_attr($logo_id) ?>" />
+    <input type="hidden" id="testing_task_site_logo" name="testing_task_site_logo" value="<?php echo esc_attr($logo_id); ?>" />
     <button type="button" class="button" id="upload_logo_button">Upload Logo</button>
     <button type="button" class="button" id="remove_logo_button">Remove</button>
-		
+
     <script>
         document.addEventListener("DOMContentLoaded", function () {
             const uploadBtn = document.getElementById("upload_logo_button");
@@ -350,6 +376,7 @@ function testing_task_site_logo_render() {
     <?php
 }
 
+
 function testing_task_allow_svg_uploads($mimes) {
     if (current_user_can('administrator')) {
         $mimes['svg'] = 'image/svg+xml';
@@ -371,34 +398,53 @@ class Testing_Task_Walker_Nav_Menu extends Walker_Nav_Menu {
 }
 
 function catalog_rewrite_rules() {
-    add_rewrite_rule(
-        '^catalog/brand/([^/]+)/page/([0-9]+)/?$',
-        'index.php?pagename=catalog&brand=$matches[1]&paged=$matches[2]',
-        'top'
-    );
+    add_rewrite_rule('^catalog/brand/([^/]+)/?$', 'index.php?pagename=catalog&brand=$matches[1]', 'top');
+    add_rewrite_rule('^catalog/category/([^/]+)/?$', 'index.php?pagename=catalog&category=$matches[1]', 'top');
+    add_rewrite_rule('^catalog/sort/([^/]+)/?$', 'index.php?pagename=catalog&sort=$matches[1]', 'top');
+    add_rewrite_rule('^catalog/search/([^/]+)/?$', 'index.php?pagename=catalog&search=$matches[1]', 'top');
+    add_rewrite_rule('^catalog/page/([0-9]+)/?$', 'index.php?pagename=catalog&paged=$matches[1]', 'top');
 
-    add_rewrite_rule(
-        '^catalog/brand/([^/]+)/?$',
-        'index.php?pagename=catalog&brand=$matches[1]',
-        'top'
-    );
+    add_rewrite_rule('^catalog/brand/([^/]+)/category/([^/]+)/?$', 'index.php?pagename=catalog&brand=$matches[1]&category=$matches[2]', 'top');
+    add_rewrite_rule('^catalog/brand/([^/]+)/sort/([^/]+)/?$', 'index.php?pagename=catalog&brand=$matches[1]&sort=$matches[2]', 'top');
+    add_rewrite_rule('^catalog/brand/([^/]+)/search/([^/]+)/?$', 'index.php?pagename=catalog&brand=$matches[1]&search=$matches[2]', 'top');
+    add_rewrite_rule('^catalog/brand/([^/]+)/page/([0-9]+)/?$', 'index.php?pagename=catalog&brand=$matches[1]&paged=$matches[2]', 'top');
+    add_rewrite_rule('^catalog/category/([^/]+)/sort/([^/]+)/?$', 'index.php?pagename=catalog&category=$matches[1]&sort=$matches[2]', 'top');
+    add_rewrite_rule('^catalog/category/([^/]+)/search/([^/]+)/?$', 'index.php?pagename=catalog&category=$matches[1]&search=$matches[2]', 'top');
+    add_rewrite_rule('^catalog/category/([^/]+)/page/([0-9]+)/?$', 'index.php?pagename=catalog&category=$matches[1]&paged=$matches[2]', 'top');
+    add_rewrite_rule('^catalog/sort/([^/]+)/search/([^/]+)/?$', 'index.php?pagename=catalog&sort=$matches[1]&search=$matches[2]', 'top');
+    add_rewrite_rule('^catalog/sort/([^/]+)/page/([0-9]+)/?$', 'index.php?pagename=catalog&sort=$matches[1]&paged=$matches[2]', 'top');
+    add_rewrite_rule('^catalog/search/([^/]+)/page/([0-9]+)/?$', 'index.php?pagename=catalog&search=$matches[1]&paged=$matches[2]', 'top');
 
-    add_rewrite_rule(
-        '^catalog/page/([0-9]+)/?$',
-        'index.php?pagename=catalog&paged=$matches[1]',
-        'top'
-    );
+    add_rewrite_rule('^catalog/brand/([^/]+)/category/([^/]+)/sort/([^/]+)/?$', 'index.php?pagename=catalog&brand=$matches[1]&category=$matches[2]&sort=$matches[3]', 'top');
+    add_rewrite_rule('^catalog/brand/([^/]+)/category/([^/]+)/search/([^/]+)/?$', 'index.php?pagename=catalog&brand=$matches[1]&category=$matches[2]&search=$matches[3]', 'top');
+    add_rewrite_rule('^catalog/brand/([^/]+)/category/([^/]+)/page/([0-9]+)/?$', 'index.php?pagename=catalog&brand=$matches[1]&category=$matches[2]&paged=$matches[3]', 'top');
+    add_rewrite_rule('^catalog/brand/([^/]+)/sort/([^/]+)/search/([^/]+)/?$', 'index.php?pagename=catalog&brand=$matches[1]&sort=$matches[2]&search=$matches[3]', 'top');
+    add_rewrite_rule('^catalog/brand/([^/]+)/sort/([^/]+)/page/([0-9]+)/?$', 'index.php?pagename=catalog&brand=$matches[1]&sort=$matches[2]&paged=$matches[3]', 'top');
+    add_rewrite_rule('^catalog/brand/([^/]+)/search/([^/]+)/page/([0-9]+)/?$', 'index.php?pagename=catalog&brand=$matches[1]&search=$matches[2]&paged=$matches[3]', 'top');
+    add_rewrite_rule('^catalog/category/([^/]+)/sort/([^/]+)/search/([^/]+)/?$', 'index.php?pagename=catalog&category=$matches[1]&sort=$matches[2]&search=$matches[3]', 'top');
+    add_rewrite_rule('^catalog/category/([^/]+)/sort/([^/]+)/page/([0-9]+)/?$', 'index.php?pagename=catalog&category=$matches[1]&sort=$matches[2]&paged=$matches[3]', 'top');
+    add_rewrite_rule('^catalog/category/([^/]+)/search/([^/]+)/page/([0-9]+)/?$', 'index.php?pagename=catalog&category=$matches[1]&search=$matches[2]&paged=$matches[3]', 'top');
+    add_rewrite_rule('^catalog/sort/([^/]+)/search/([^/]+)/page/([0-9]+)/?$', 'index.php?pagename=catalog&sort=$matches[1]&search=$matches[2]&paged=$matches[3]', 'top');
+
+    add_rewrite_rule('^catalog/brand/([^/]+)/category/([^/]+)/sort/([^/]+)/search/([^/]+)/?$', 'index.php?pagename=catalog&brand=$matches[1]&category=$matches[2]&sort=$matches[3]&search=$matches[4]', 'top');
+    add_rewrite_rule('^catalog/brand/([^/]+)/category/([^/]+)/sort/([^/]+)/page/([0-9]+)/?$', 'index.php?pagename=catalog&brand=$matches[1]&category=$matches[2]&sort=$matches[3]&paged=$matches[4]', 'top');
+    add_rewrite_rule('^catalog/brand/([^/]+)/category/([^/]+)/search/([^/]+)/page/([0-9]+)/?$', 'index.php?pagename=catalog&brand=$matches[1]&category=$matches[2]&search=$matches[3]&paged=$matches[4]', 'top');
+    add_rewrite_rule('^catalog/brand/([^/]+)/sort/([^/]+)/search/([^/]+)/page/([0-9]+)/?$', 'index.php?pagename=catalog&brand=$matches[1]&sort=$matches[2]&search=$matches[3]&paged=$matches[4]', 'top');
+    add_rewrite_rule('^catalog/category/([^/]+)/sort/([^/]+)/search/([^/]+)/page/([0-9]+)/?$', 'index.php?pagename=catalog&category=$matches[1]&sort=$matches[2]&search=$matches[3]&paged=$matches[4]', 'top');
+
+    add_rewrite_rule('^catalog/brand/([^/]+)/category/([^/]+)/sort/([^/]+)/search/([^/]+)/page/([0-9]+)/?$', 'index.php?pagename=catalog&brand=$matches[1]&category=$matches[2]&sort=$matches[3]&search=$matches[4]&paged=$matches[5]', 'top');
 }
 add_action('init', 'catalog_rewrite_rules');
 
 function catalog_query_vars($vars) {
     $vars[] = 'brand';
+    $vars[] = 'category';
+    $vars[] = 'sort';
+    $vars[] = 'search';
     $vars[] = 'paged';
     return $vars;
 }
 add_filter('query_vars', 'catalog_query_vars');
-flush_rewrite_rules();
-
 
 add_action('rest_api_init', function () {
     register_rest_route('testing-task/v1', '/cars', [

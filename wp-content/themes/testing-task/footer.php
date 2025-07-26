@@ -38,7 +38,7 @@
 	<div class='copyright border-t border-white-50 bg-sky-500/30 p-2'>
 		<div class='container'>
 			<div class='copyright__content flex justify-between'>
-				<p>All right reserved. Copyright (c)</p>
+				<p><?php echo get_option('testing_task_copyright') ?></p>
 				<p>2020 - 2025</p>
 			</div>
 		</div>

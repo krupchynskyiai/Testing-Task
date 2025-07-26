@@ -7,6 +7,6 @@ document.addEventListener('DOMContentLoaded', () => {
 	console.log(el)
 	if (el) {
 		const root = createRoot(el);
-		root.render(<CatalogApp />);
+		root.render(<CatalogApp apiToken={secretData.apiToken} />);
 	}
 });

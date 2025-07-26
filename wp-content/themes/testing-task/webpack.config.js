@@ -1,10 +1,19 @@
 const path = require('path');
+const glob = require('glob');
 const DependencyExtractionWebpackPlugin = require('@wordpress/dependency-extraction-webpack-plugin');
+
+const blockScripts = {};
+
+const files = glob.sync('./template-parts/blocks/**/script.js');
+const allBlockScripts = files.map(file => path.resolve(__dirname, file));
 
 module.exports = (env, argv) => ({
   entry: {
     index: './src/js/blocks',
     'blocks/catalog/frontend': './src/js/gutenberg/catalog/frontend',
+    slider: './src/js/slider',
+    'blocks/all-blocks': allBlockScripts,
+    main: './src/js/main'
   },
   output: {
     path: path.resolve(__dirname, 'build'),
@@ -20,6 +29,10 @@ module.exports = (env, argv) => ({
       {
         test: /\.scss$/,
         use: ['style-loader', 'css-loader', 'sass-loader'],
+      },
+      {
+        test: /\.css$/i,
+        use: ['style-loader', 'css-loader'],
       },
     ],
   },

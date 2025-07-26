@@ -80,34 +80,69 @@ const DropdownCheckbox = ({ legend, options, selected, name, onChange }) => {
 };
 
 const parseUrl = (pathname) => {
-  console.log("pathname:", pathname);
   const parts = pathname.replace(/^\/|\/$/g, "").split("/");
-  console.log("parts:", parts);
 
   let brand = [];
+  let category = [];
+  let sort = "";
+  let search = "";
   let page = 1;
 
   for (let i = 0; i < parts.length; i++) {
-    if (parts[i] === "brand" && parts[i + 1]) {
-      brand = parts[i + 1].split(",");
-      i++;
-    } else if (parts[i] === "page" && parts[i + 1]) {
-      page = parseInt(parts[i + 1], 10) || 1;
-      i++;
-      console.log("found page:", page);
+    switch (parts[i]) {
+      case "brand":
+        if (parts[i + 1]) {
+          brand = parts[i + 1].split(",");
+          i++;
+        }
+        break;
+      case "category":
+        if (parts[i + 1]) {
+          category = parts[i + 1].split(",");
+          i++;
+        }
+        break;
+      case "sort":
+        if (parts[i + 1]) {
+          sort = decodeURIComponent(parts[i + 1]);
+          i++;
+        }
+        break;
+      case "search":
+        if (parts[i + 1]) {
+          search = decodeURIComponent(parts[i + 1]);
+          i++;
+        }
+        break;
+      case "page":
+        if (parts[i + 1]) {
+          page = parseInt(parts[i + 1], 10) || 1;
+          i++;
+        }
+        break;
     }
   }
 
-  console.log("final page:", page);
-
-  return { brand, page };
+  return { brand, category, sort, search, page };
 };
 
-const buildUrl = ({ brand = [], page = 1 }) => {
+const buildUrl = ({ brand = [], category = [], sort = "", search = "", page = 1 }) => {
   let url = "/catalog/";
 
   if (brand.length > 0) {
     url += `brand/${brand.join(",")}/`;
+  }
+
+  if (category.length > 0) {
+    url += `category/${category.join(",")}/`;
+  }
+
+  if (sort) {
+    url += `sort/${encodeURIComponent(sort)}/`;
+  }
+
+  if (search) {
+    url += `search/${encodeURIComponent(search)}/`;
   }
 
   if (page > 1) {
@@ -117,7 +152,8 @@ const buildUrl = ({ brand = [], page = 1 }) => {
   return url;
 };
 
-const CatalogApp = () => {
+
+const CatalogApp = ({ apiToken }) => {
   const [cars, setCars] = useState([]);
   const [filters, setFilters] = useState({
     brand: [],
@@ -134,23 +170,29 @@ const CatalogApp = () => {
   const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
-    const { brand: parsedBrand, page: parsedPage } = parseUrl(
-      window.location.pathname
-    );
+    const parsed = parseUrl(window.location.pathname);
 
-    setFilters({ brand: parsedBrand, category: [] });
-    setPage(parsedPage);
+    setFilters({ brand: parsed.brand, category: parsed.category });
+    setSort(parsed.sort || "newest");
+    setSearch(parsed.search || "");
+    setPage(parsed.page);
     setLoadType("reset");
     setInitialized(true);
   }, []);
 
   useEffect(() => {
-    const newUrl = buildUrl({ brand: filters.brand, page });
-    console.log("pushState newUrl:", newUrl, "page:", page);
+    const newUrl = buildUrl({
+      brand: filters.brand,
+      category: filters.category,
+      sort,
+      search,
+      page,
+    });
+
     if (window.location.pathname !== newUrl) {
       window.history.pushState(null, "", newUrl);
     }
-  }, [filters.brand, page]);
+  }, [filters, sort, search, page]);
 
   useEffect(() => {
     if (!initialized) return;
@@ -198,7 +240,7 @@ const CatalogApp = () => {
 
       const response = await fetch(`/wp-json/testing-task/v1/cars?${query}`, {
         headers: {
-          Authorization: "Bearer GRJ^j^a7bdFBI9ZUu1I*lxvjAYAjpJdb",
+          Authorization: `Bearer ${apiToken}`,
         },
       });
 
